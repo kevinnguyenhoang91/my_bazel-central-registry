@@ -1,0 +1,49 @@
+name: BCR Presubmit
+
+on:
+  pull_request:
+    branches:
+      - my_central_master
+  push:
+    branches:
+      - my_central_master
+
+jobs:
+  bcr_validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout registry
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install BCR tooling dependencies
+        run: pip install validators pyyaml
+
+      - name: Determine changed module versions
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [[ -z "$BASE_REF" || "$BASE_REF" == "0000000000000000000000000000000000000000" ]]; then
+            BASE_REF="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          CHANGED_PATHS="$(git diff --name-only "$BASE_REF" HEAD -- 'modules/*/*/' || true)"
+          CHECKS=""
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+            name="$(echo "$path" | cut -d/ -f2)"
+            version="$(echo "$path" | cut -d/ -f3)"
+            [[ -z "$name" || -z "$version" ]] && continue
+            CHECKS="$CHECKS --check ${name}@${version}"
+          done <<< "$(echo "$CHANGED_PATHS" | sed -E 's#^modules/([^/]+)/([^/]+)/.*#modules/\1/\2/#' | sort -u)"
+          echo "checks=$CHECKS" >> "$GITHUB_OUTPUT"
+
+      - name: Run bcr_validation.py on changed modules
+        if: steps.changed.outputs.checks != ''
+        run: python3 tools/bcr_validation.py ${{ steps.changed.outputs.checks }}
