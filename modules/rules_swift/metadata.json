@@ -32,5 +32,7 @@
         "1.6.0",
         "myapp-1.6.0.1"
     ],
-    "yanked_versions": {}
+    "yanked_versions": {
+        "myapp-1.6.0.1": "pre-9.2.0; unsupported"
+    }
 }
